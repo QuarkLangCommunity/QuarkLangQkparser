@@ -31,9 +31,6 @@ func Parse(toks []Token) (*Program, error) {
 	return p.parseProgram()
 }
 
-// Compile lexes, parses, and statically type-checks source code
-// (spec §11.1: strict checks run at compile time).
-
 func (p *parser) cur() Token { return p.toks[p.i] }
 func (p *parser) peekTextIs(t string) bool {
 	return p.i+1 < len(p.toks) && p.toks[p.i+1].Kind != TEOF && p.toks[p.i+1].Text == t
