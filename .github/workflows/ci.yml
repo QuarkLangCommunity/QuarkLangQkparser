@@ -1,0 +1,39 @@
+name: ci
+on: [push, pull_request]
+
+# Least privilege: CI only reads the repository (every job here just checks out, builds, tests and
+# checks formatting).
+permissions:
+  contents: read
+
+# A new push on the same ref cancels older runs (saves runners).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Cross-platform gate: the same syntax-layer tests run on Linux / macOS / Windows.
+  test:
+    name: tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26'
+      - name: Build & test
+        run: |
+          go build ./...
+          go test ./... -count=1
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "these files are not gofmt-clean:"
+            echo "$unformatted"
+            exit 1
+          fi
