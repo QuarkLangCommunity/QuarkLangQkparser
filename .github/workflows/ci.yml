@@ -34,6 +34,12 @@ jobs:
       # error, so without this line the Windows leg died in the step runner before gofmt ever ran, while
       # ubuntu and macos passed. bash is present on all three runners, so pinning the shell keeps the
       # check identical — and equally strict — everywhere instead of silently skipping the platform.
+      #
+      # The second half of the same platform problem is .gitattributes: fixing the shell is what let this
+      # step run on Windows for the first time, and it immediately reported every file, because a Windows
+      # checkout is CRLF (a .go checkout with core.autocrlf=true) and gofmt calls a CRLF file unformatted.
+      # The `*.go text eol=lf` rule keeps the working tree LF there, so this gate now measures formatting
+      # on all three platforms rather than line endings on one of them.
       - name: gofmt
         shell: bash
         run: |
