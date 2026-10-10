@@ -29,7 +29,13 @@ jobs:
         run: |
           go build ./...
           go test ./... -count=1
+      # shell: bash is required, not cosmetic. Only Windows has a different default shell (pwsh), and the
+      # step below is sh syntax: `unformatted=$(...)` and `[ -n "$unformatted" ]` are a PowerShell parse
+      # error, so without this line the Windows leg died in the step runner before gofmt ever ran, while
+      # ubuntu and macos passed. bash is present on all three runners, so pinning the shell keeps the
+      # check identical — and equally strict — everywhere instead of silently skipping the platform.
       - name: gofmt
+        shell: bash
         run: |
           unformatted=$(gofmt -l .)
           if [ -n "$unformatted" ]; then
