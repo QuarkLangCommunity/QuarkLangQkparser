@@ -14,6 +14,7 @@ import "github.com/QuarkLangCommunity/QuarkLangQkparser"
 | `token.go` | The lexer: `TokenKind`, `Token`, `Comment`, `Lex`, `LexWithComments` |
 | `ast.go` | The AST: `Pos`, `Program`, the `Stmt`/`Expr` node types, `CallExpr.PlainArgs` |
 | `parser.go` | `Parse` and the recursive-descent parser behind it; `ParseError` |
+| `limits.go` | `MaxExprDepth`: the nesting limit both guarded descent entry points (`parseExpr`, `parseStmt`) count against |
 | `macro.go` | The token-level macro system: `SplitMacroDefs`, `ExpandMacros` |
 | `refperm.go` | The parser half of permission-carrying reference types (`&rw u int p`) |
 | `frontend.go` | Single-file entry points: `ParseSource`, `ParseSourceWithComments`, `ParseSourceAll` |
