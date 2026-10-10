@@ -1,0 +1,8 @@
+# Go sources are LF in the repository and have to be LF in every checkout.
+#
+# `gofmt -l .` is a CI gate here, and gofmt reports a CRLF file as unformatted. Windows checks text
+# files out with CRLF by default (core.autocrlf=true), so without this rule that gate failed on that
+# platform for every file at once — a platform-shaped failure that says nothing about the code. An
+# `eol` attribute overrides core.autocrlf, and the rule only pins the working tree: the blobs are LF
+# already, so no file in the repository changes.
+*.go text eol=lf
