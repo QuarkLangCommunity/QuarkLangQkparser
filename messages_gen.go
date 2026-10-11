@@ -10,64 +10,140 @@ type ID uint16
 
 // Message IDs. The text of an ID is the English source; it is not the ID.
 const (
-	IDMacroUnbalancedDelimiters ID = 0
-	IDMacroArgCountMismatch     ID = 1
-	IDMacroExpandFailed         ID = 2
-	IDPpSharpNeedsCommand       ID = 3
-	IDPpUnknownDirective        ID = 4
-	IDPpRequiresParens          ID = 5
-	IDPpErrorNeedsMessage       ID = 6
-	IDPpErrorDirective          ID = 7
-	IDPpInsertNotMacroParam     ID = 8
-	IDPpExecuteNeedsName        ID = 9
-	IDPpUnknownCommand          ID = 10
-	IDPpInsertNeedsAst          ID = 11
-	IDMacroNeedsName            ID = 12
-	IDMacroMissingParamList     ID = 13
-	IDMacroParamListDelimiters  ID = 14
-	IDMacroParamsMustBeNames    ID = 15
-	IDMacroMissingBody          ID = 16
-	IDMacroBodyDelimiters       ID = 17
-	IDPpIncludeTooDeep          ID = 18
-	IDPpElifWithoutIf           ID = 19
-	IDPpBranchWithoutIf         ID = 20
-	IDPpIncludeFailed           ID = 21
-	IDPpUnclosedIf              ID = 22
-	IDPpUnrecognizedCondition   ID = 23
-	IDNestingTooDeep            ID = 24
+	IDMacroUnbalancedDelimiters    ID = 0
+	IDMacroArgCountMismatch        ID = 1
+	IDMacroExpandFailed            ID = 2
+	IDPpSharpNeedsCommand          ID = 3
+	IDPpUnknownDirective           ID = 4
+	IDPpRequiresParens             ID = 5
+	IDPpErrorNeedsMessage          ID = 6
+	IDPpErrorDirective             ID = 7
+	IDPpInsertNotMacroParam        ID = 8
+	IDPpExecuteNeedsName           ID = 9
+	IDPpUnknownCommand             ID = 10
+	IDPpInsertNeedsAst             ID = 11
+	IDMacroNeedsName               ID = 12
+	IDMacroMissingParamList        ID = 13
+	IDMacroParamListDelimiters     ID = 14
+	IDMacroParamsMustBeNames       ID = 15
+	IDMacroMissingBody             ID = 16
+	IDMacroBodyDelimiters          ID = 17
+	IDPpIncludeTooDeep             ID = 18
+	IDPpElifWithoutIf              ID = 19
+	IDPpBranchWithoutIf            ID = 20
+	IDPpIncludeFailed              ID = 21
+	IDPpUnclosedIf                 ID = 22
+	IDPpUnrecognizedCondition      ID = 23
+	IDNestingTooDeep               ID = 24
+	IDNamedStructRequiresType      ID = 25
+	IDNamedInterfaceRequiresType   ID = 26
+	IDLibraryBodySignaturesOnly    ID = 27
+	IDProgramOnlyMainOrLibrary     ID = 28
+	IDDuplicateProgramMacro        ID = 29
+	IDAnonStructHasNoName          ID = 30
+	IDAnonInterfaceHasNoName       ID = 31
+	IDPubTypeOnlyStructOrInterface ID = 32
+	IDPubPrefixRestricted          ID = 33
+	IDFunctionKeywordIsFn          ID = 34
+	IDFunctionNeedsReturnType      ID = 35
+	IDAnonStructNoGenerics         ID = 36
+	IDAnonInterfaceNoGenerics      ID = 37
+	IDExpectedGot                  ID = 38
+	IDUnterminatedTypeArguments    ID = 39
+	IDUnterminatedStructBody       ID = 40
+	IDUnterminatedSpaceBody        ID = 41
+	IDUnterminatedLibraryBody      ID = 42
+	IDUnterminatedInterfaceBody    ID = 43
+	IDUnterminatedImplBody         ID = 44
+	IDUnterminatedFunctionType     ID = 45
+	IDUnterminatedBlock            ID = 46
+	IDUnexpectedTokenInExpression  ID = 47
+	IDSignatureMustFollowCall      ID = 48
+	IDScopeRequiresIdentifier      ID = 49
+	IDIntLiteralOutOfRange         ID = 50
+	IDExpectedFn                   ID = 51
+	IDExpectedTopLevelDeclaration  ID = 52
+	IDDuplicateSignature           ID = 53
+	IDUnterminatedBlockComment     ID = 54
+	IDUnexpectedCharacter          ID = 55
+	IDInvalidHexLiteralNoDigits    ID = 56
+	IDInvalidHexLiteral            ID = 57
+	IDInvalidFloatLiteral          ID = 58
+	IDInvalidIntLiteral            ID = 59
+	IDUnterminatedRawString        ID = 60
+	IDUnterminatedStringLiteral    ID = 61
+	IDUnterminatedEscapeSequence   ID = 62
 )
 
 // msgOffsets[k] is the end offset of message k in msgBlob (start is the previous entry, 0 for the first).
 var msgOffsets = [...]uint32{
-	43,
-	119,
-	143,
-	203,
-	252,
-	283,
-	320,
-	359,
+	42,
+	116,
+	145,
+	215,
+	269,
+	298,
+	334,
+	353,
 	413,
-	450,
-	488,
-	524,
-	568,
-	621,
-	690,
-	779,
-	826,
-	889,
-	934,
-	966,
-	996,
-	1023,
-	1067,
-	1102,
-	1214,
+	446,
+	487,
+	525,
+	565,
+	625,
+	691,
+	775,
+	825,
+	881,
+	916,
+	951,
+	984,
+	1010,
+	1055,
+	1092,
+	1204,
+	1259,
+	1320,
+	1372,
+	1426,
+	1462,
+	1534,
+	1612,
+	1653,
+	1729,
+	1804,
+	1877,
+	1964,
+	2057,
+	2076,
+	2109,
+	2147,
+	2170,
+	2195,
+	2236,
+	2272,
+	2298,
+	2330,
+	2363,
+	2402,
+	2441,
+	2499,
+	2512,
+	2598,
+	2629,
+	2655,
+	2678,
+	2721,
+	2743,
+	2767,
+	2789,
+	2812,
+	2839,
+	2867,
 }
 
 // msgBlob is every message's English text, back to back, in ID order.
-const msgBlob = `ParseError: 分隔符不配对，第 %d 行ParseError: 宏 %s 需要 %d 个参数，调用给了 %d 个（第 %d 行）宏 %s 展开失败：%v第 %d 行：# 后必须是预处理命令（return/error）第 %d 行：#%s 不是 QuarkLang 预处理指令第 %d 行：#%s 需要 ( ... )第 %d 行：#error 需要 ("消息")第 %d 行：预处理错误 #error(%s)第 %d 行：#insert(#ast(%s))：%s 不是宏参数名第 %d 行：#execute 需要 (名字)第 %d 行：未知预处理命令 #%s#insert 需要 (#ast(名字)) 形式ParseError: #macro 需要名字，第 %d 行ParseError: #macro %s 缺少参数列表，第 %d 行ParseError: #macro %s 参数列表需要 () [] {} 之一，第 %d 行ParseError: #macro %s 参数必须是名字（逗号分隔，个数不限），第 %d 行ParseError: #macro %s 缺少主体，第 %d 行ParseError: #macro %s 主体需要 () [] {} 之一，第 %d 行预处理 #include 层数过深（>16）：%s%s:%d: #elif 没有对应的 #if%s:%d: #%s 没有对应的 #if%s:%d: #include 失败：%v%s: 有 %d 个 #if 未闭合（缺 #endif）无法识别的条件表达式：%qnesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statements`
+const msgBlob = `ParseError: unbalanced delimiters, line %dParseError: macro %s expects %d parameters but the call passed %d, line %dmacro %s failed to expand: %vline %d: '#' must be followed by a preprocessor command (return/error)line %d: #%s is not a QuarkLang preprocessor directiveline %d: #%s requires ( ... )line %d: #error requires ("message")line %d: #error(%s)line %d: #insert(#ast(%s)): %s is not a macro parameter nameline %d: #execute requires (name)line %d: unknown preprocessor command #%s#insert requires the (#ast(name)) formParseError: #macro needs a name, line %dParseError: #macro %s is missing its parameter list, line %dParseError: #macro %s parameter list must use () [] or {}, line %dParseError: #macro %s parameters must be names (comma-separated, any count), line %dParseError: #macro %s is missing its body, line %dParseError: #macro %s body must use () [] or {}, line %d#include nesting too deep (>16): %s%s:%d: #elif without a matching #if%s:%d: #%s without a matching #if%s:%d: #include failed: %v%s: %d unclosed #if block(s) (missing #endif)unrecognized condition expression: %qnesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statementsa named struct requires 'type': type struct { ... } %s;a named interface requires 'type': type interface { ... } %s;a library body may only contain fn symbol signaturesprogram declarations support only main / library (lib)duplicate program preprocessor macroan anonymous struct has no name to export: pub type struct { ... } Name;an anonymous interface has no name to export: pub type interface { ... } Name;pub type supports only struct / interfacepub may only prefix fn or type struct/interface (named types require 'type')the function keyword is 'fn': write fn main(...) rather than func main(...)a function must declare its return type: fn %s(...) <return type> { ... }an anonymous struct cannot take generic parameters (write type struct<T> { ... } Name;)an anonymous interface cannot take generic parameters (write type interface<T> { ... } Name;)expected %s, got %sunterminated type arguments in %qunterminated struct body (missing '}')unterminated space bodyunterminated library bodyunterminated interface body (missing '}')unterminated impl body (missing '}')unterminated function typeunterminated block (missing '}')unexpected token %s in expression@ signature must follow a function call'::' requires an identifier on the leftint literal %d out of 32-bit range (int is 32-bit, like C)expected 'fn'expected a top-level declaration (fn/struct/impl/interface/program/import/pub), got %sduplicate signature on one callunterminated block commentunexpected character %qinvalid hex literal %q (no digits after 0x)invalid hex literal %qinvalid float literal %qinvalid int literal %qunterminated raw stringunterminated string literalunterminated escape sequence`
 
 // Messages returns every message this package ships, in ID order, as the (ID, text) pairs the
 // consumer's catalog generator validates its own table against.

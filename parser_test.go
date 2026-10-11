@@ -1,6 +1,7 @@
 package qkparser
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -139,14 +140,44 @@ func TestSetLocalizerRoutesMessages(t *testing.T) {
 }
 
 // TestSourceLocalizerRendersTheAuthoredEnglish: with no localizer installed the package renders its
-// own authored English text — the source text of the ID, out of the packed blob.
+// own authored English text — the source text of the ID, out of the packed blob. The source language
+// is English for every row, including the ones whose text used to be Chinese: a consumer that fails
+// to cover an ID must fall back to English, never to a language the reader did not ask for.
 func TestSourceLocalizerRendersTheAuthoredEnglish(t *testing.T) {
 	if got := (sourceLocalizer{}).Msg(IDNestingTooDeep, 7); !strings.Contains(got, "7 levels") {
 		t.Fatalf("source localizer rendered %q", got)
 	}
-	if got := (sourceLocalizer{}).Msg(IDPpInsertNeedsAst); got != "#insert 需要 (#ast(名字)) 形式" {
+	if got := (sourceLocalizer{}).Msg(IDPpInsertNeedsAst); got != "#insert requires the (#ast(name)) form" {
 		t.Fatalf("source localizer rendered %q", got)
 	}
+	if got := (sourceLocalizer{}).Msg(IDNamedStructRequiresType, "Foo"); !strings.HasPrefix(got, "a named struct requires 'type'") {
+		t.Fatalf("source localizer rendered %q", got)
+	}
+}
+
+// TestNoMessageIsWrittenInChinese: the table's language column is a claim about the text, and it was
+// a claim nothing checked. 24 rows declared "en" while carrying Chinese, so this package's own
+// fallback rendered Chinese to an English reader, and no gate in either repository could see it —
+// the consumer's scanner cannot reach this module and its miss counter does not fire for a template
+// that renders the same way in both languages. English is the source language, so a Han rune in a
+// source template is now a failure here, where the text is authored.
+func TestNoMessageIsWrittenInChinese(t *testing.T) {
+	han := regexp.MustCompile(`[\p{Han}]`)
+	n := 0
+	for _, m := range Messages() {
+		if strings.TrimSpace(m.Text) == "" {
+			t.Errorf("message %d has no source text", m.ID)
+			continue
+		}
+		if han.MatchString(m.Text) {
+			t.Errorf("message %d: the source text is not English: %q", m.ID, m.Text)
+		}
+		n++
+	}
+	if n == 0 {
+		t.Fatal("the table is empty")
+	}
+	t.Logf("checked %d source messages for a non-English source", n)
 }
 
 // TestLexSeparatesCommentsFromTokens: lexing with comments returns both streams so a formatter can

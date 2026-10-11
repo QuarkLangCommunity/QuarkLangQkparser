@@ -193,8 +193,11 @@ func lex(src string, collectComments bool) ([]Token, []Comment, error) {
 	}
 }
 
-func (lx *lexer) errf(line, col int, format string, args ...interface{}) error {
-	return &LexError{Msg: fmt.Sprintf(format, args...), Line: line, Col: col}
+// errfID is the lexer's half of the message design: the call site names a stable ID instead of a
+// format string, so the wording of a refusal can change without changing which refusal it is, and
+// the consumer resolves the ID in the reader's language.
+func (lx *lexer) errfID(line, col int, id ID, args ...any) error {
+	return &LexError{Msg: msgID(id, args...), Line: line, Col: col}
 }
 
 func (lx *lexer) peekByte() byte {
@@ -255,7 +258,7 @@ func (lx *lexer) skipSpace() error {
 				lx.advance()
 			}
 			if !closed {
-				return lx.errf(line, col, "unterminated block comment")
+				return lx.errfID(line, col, IDUnterminatedBlockComment)
 			}
 			lx.addComment(Comment{
 				Text: lx.src[start:lx.pos], Pos: Pos{Line: line, Col: col},
@@ -401,7 +404,7 @@ func (lx *lexer) next() (Token, error) {
 	case '~':
 		return one(TTilde)
 	}
-	return Token{}, lx.errf(line, col, "unexpected character %q", string(rune(c)))
+	return Token{}, lx.errfID(line, col, IDUnexpectedCharacter, string(rune(c)))
 }
 
 func (lx *lexer) lexNumber(line, col int) (Token, error) {
@@ -420,11 +423,11 @@ func (lx *lexer) lexNumber(line, col int) (Token, error) {
 		}
 		text := lx.src[start:lx.pos]
 		if lx.pos == digits {
-			return Token{}, lx.errf(line, col, "invalid hex literal %q (no digits after 0x)", text)
+			return Token{}, lx.errfID(line, col, IDInvalidHexLiteralNoDigits, text)
 		}
 		n, err := strconv.ParseInt(lx.src[digits:lx.pos], 16, 64)
 		if err != nil {
-			return Token{}, lx.errf(line, col, "invalid hex literal %q", text)
+			return Token{}, lx.errfID(line, col, IDInvalidHexLiteral, text)
 		}
 		return Token{Kind: TInt, Text: text, Int: n, Line: line, Col: col}, nil
 	}
@@ -443,13 +446,13 @@ func (lx *lexer) lexNumber(line, col int) (Token, error) {
 	if isFloat {
 		f, err := strconv.ParseFloat(text, 64)
 		if err != nil {
-			return Token{}, lx.errf(line, col, "invalid float literal %q", text)
+			return Token{}, lx.errfID(line, col, IDInvalidFloatLiteral, text)
 		}
 		return Token{Kind: TFloat, Text: text, Flt: f, Line: line, Col: col}, nil
 	}
 	n, err := strconv.ParseInt(text, 10, 64)
 	if err != nil {
-		return Token{}, lx.errf(line, col, "invalid int literal %q", text)
+		return Token{}, lx.errfID(line, col, IDInvalidIntLiteral, text)
 	}
 	return Token{Kind: TInt, Text: text, Int: n, Line: line, Col: col}, nil
 }
@@ -470,7 +473,7 @@ func (lx *lexer) lexRawString(line, col int) (Token, error) {
 		// shift the line numbers of every token after a multi-line raw string (one extra line per newline).
 		lx.advance()
 	}
-	return Token{}, lx.errf(line, col, "unterminated raw string")
+	return Token{}, lx.errfID(line, col, IDUnterminatedRawString)
 }
 
 func (lx *lexer) lexString(line, col int) (Token, error) {
@@ -478,7 +481,7 @@ func (lx *lexer) lexString(line, col int) (Token, error) {
 	var sb []byte
 	for {
 		if lx.pos >= len(lx.src) {
-			return Token{}, lx.errf(line, col, "unterminated string literal")
+			return Token{}, lx.errfID(line, col, IDUnterminatedStringLiteral)
 		}
 		c := lx.src[lx.pos]
 		if c == '"' {
@@ -488,7 +491,7 @@ func (lx *lexer) lexString(line, col int) (Token, error) {
 		if c == '\\' {
 			lx.advance()
 			if lx.pos >= len(lx.src) {
-				return Token{}, lx.errf(line, col, "unterminated escape sequence")
+				return Token{}, lx.errfID(line, col, IDUnterminatedEscapeSequence)
 			}
 			e := lx.src[lx.pos]
 			switch e {
