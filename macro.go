@@ -205,8 +205,17 @@ func macroCallExcluded(i int, toks []Token) bool {
 	return false
 }
 
-// macroCommand reports whether a `#` command is one this stage implements; the rest belong to the
-// line-level preprocessor or to a stage that does not exist yet.
+// lineDirective reports whether a `#` command belongs to the line-level preprocessor, which decides it
+// before lexing: inside a macro body it is the expander's job to drop what the preprocessor kept.
+func lineDirective(cmd string) bool {
+	switch cmd {
+	case "if", "ifn", "ifdef", "ifndef", "elif", "else", "endif", "define", "undef", "include", "run", "expand":
+		return true
+	}
+	return false
+}
+
+// macroCommand reports whether a `#` command is one this stage implements.
 func macroCommand(cmd string) bool {
 	switch cmd {
 	case "return", "error", "insert", "execute":
@@ -249,10 +258,16 @@ func expandBody(body []Token, subst map[string][]Token, paramOrder []string) ([]
 			return out, true, nil
 		}
 		if !macroCommand(cmd) {
-			// A directive this stage does not implement — a line-level one the preprocessor left for
-			// whoever owns it (`#if`, `#ifdef`, `#endif`, `#define`, …), or one nothing implements yet
-			// (`#expand`, `#run`, §7.2). It is dropped rather than refused: the preprocessor decided it
-			// already, and refusing here would make a legal guarded body unexpandable.
+			if !lineDirective(cmd) {
+				// Not a directive this stage knows and not one the preprocessor owns either: a spelling
+				// that does not exist in the language. It is refused rather than skipped, because the
+				// tokens after it would otherwise be expanded as if the guard were not there — that is
+				// how `#when (compile) { #return 111 }` used to reach the output of one engine only.
+				return nil, false, errors.New(msg("第 %d 行：#%s 不是 QuarkLang 预处理指令", t.Line, cmd))
+			}
+			// A line-level directive the preprocessor left behind: it already decided this line, and a
+			// macro body is the one place it cannot decide alone (the body is only meaningful at a call
+			// site), so the tokens are dropped here instead.
 			if i < len(body) && body[i].Kind == TLParen {
 				if _, ni, err := takeBalancedPair(body, i, TRParen); err == nil {
 					i = ni
