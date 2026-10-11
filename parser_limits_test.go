@@ -66,7 +66,7 @@ func TestDeepOperatorChainIsNotRefusedByTheParser(t *testing.T) {
 // TestGuardRendersThroughTheInstalledLocalizer: the refusal is a message like any other in this package,
 // so an embedder's localizer renders it — which is what keeps the interpreter's catalog covering it.
 func TestGuardRendersThroughTheInstalledLocalizer(t *testing.T) {
-	prev := SetLocalizer(prefixLocalizer{prefix: "[probe] "})
+	prev := SetLocalizer(prefixMessages{prefix: "[probe] "})
 	defer SetLocalizer(prev)
 	_, err := ParseSource(nestSource(2 * MaxExprDepth))
 	if err == nil {

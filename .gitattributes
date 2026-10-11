@@ -6,3 +6,9 @@
 # `eol` attribute overrides core.autocrlf, and the rule only pins the working tree: the blobs are LF
 # already, so no file in the repository changes.
 *.go text eol=lf
+
+# The authored message table is the input to messages_gen.go, and a consumer reads this file to check its
+# own catalog against it. Pin it to LF in every checkout: with core.autocrlf the CRLF working tree would
+# otherwise put a carriage return inside every message's text on Windows, and the generated blob would
+# differ by platform (which is how this was found: the consumer's CI failed on windows only).
+i18n/source/*.tsv text eol=lf

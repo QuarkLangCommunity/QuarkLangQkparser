@@ -1,0 +1,45 @@
+# The message table of the syntax layer.
+#
+# This file is the single source of truth for the messages this repository ships. It is not a
+# translation table: it is the list of message IDs and the canonical English text of each, and it is
+# what turns "this module's ids are complete" into a checkable property from outside.
+#
+# Columns, tab-separated, in this order:
+#   id     dotted <domain>.<snake_case>, stable forever, never renumbered, never recycled
+#   lang   the language this row's text is written in ("en" = the canonical source)
+#   text   the template, strconv.Quote'd, so \n, \t, \" and the % verbs round-trip exactly
+#
+# One row per (id, language). A language may be added later without touching existing rows.
+# Regenerate with:  go generate ./...
+#
+# The scope is the msg() surface of this module — every call site that hands a template to a
+# localizer, which is what the consumer's catalog is keyed by. A template that is English today is
+# listed with that English text verbatim, so writing it down changes no output; it makes the message
+# addressable, and it is the only form in which a consumer can be checked against it.
+#
+# id	lang	text
+parser.macro_unbalanced_delimiters	en	"ParseError: 分隔符不配对，第 %d 行"
+parser.macro_arg_count_mismatch	en	"ParseError: 宏 %s 需要 %d 个参数，调用给了 %d 个（第 %d 行）"
+parser.macro_expand_failed	en	"宏 %s 展开失败：%v"
+parser.pp_sharp_needs_command	en	"第 %d 行：# 后必须是预处理命令（return/error）"
+parser.pp_unknown_directive	en	"第 %d 行：#%s 不是 QuarkLang 预处理指令"
+parser.pp_requires_parens	en	"第 %d 行：#%s 需要 ( ... )"
+parser.pp_error_needs_message	en	"第 %d 行：#error 需要 (\"消息\")"
+parser.pp_error_directive	en	"第 %d 行：预处理错误 #error(%s)"
+parser.pp_insert_not_macro_param	en	"第 %d 行：#insert(#ast(%s))：%s 不是宏参数名"
+parser.pp_execute_needs_name	en	"第 %d 行：#execute 需要 (名字)"
+parser.pp_unknown_command	en	"第 %d 行：未知预处理命令 #%s"
+parser.pp_insert_needs_ast	en	"#insert 需要 (#ast(名字)) 形式"
+parser.macro_needs_name	en	"ParseError: #macro 需要名字，第 %d 行"
+parser.macro_missing_param_list	en	"ParseError: #macro %s 缺少参数列表，第 %d 行"
+parser.macro_param_list_delimiters	en	"ParseError: #macro %s 参数列表需要 () [] {} 之一，第 %d 行"
+parser.macro_params_must_be_names	en	"ParseError: #macro %s 参数必须是名字（逗号分隔，个数不限），第 %d 行"
+parser.macro_missing_body	en	"ParseError: #macro %s 缺少主体，第 %d 行"
+parser.macro_body_delimiters	en	"ParseError: #macro %s 主体需要 () [] {} 之一，第 %d 行"
+parser.pp_include_too_deep	en	"预处理 #include 层数过深（>16）：%s"
+parser.pp_elif_without_if	en	"%s:%d: #elif 没有对应的 #if"
+parser.pp_branch_without_if	en	"%s:%d: #%s 没有对应的 #if"
+parser.pp_include_failed	en	"%s:%d: #include 失败：%v"
+parser.pp_unclosed_if	en	"%s: 有 %d 个 #if 未闭合（缺 #endif）"
+parser.pp_unrecognized_condition	en	"无法识别的条件表达式：%q"
+parser.nesting_too_deep	en	"nesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statements"

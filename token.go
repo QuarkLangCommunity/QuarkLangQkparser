@@ -194,7 +194,7 @@ func lex(src string, collectComments bool) ([]Token, []Comment, error) {
 }
 
 func (lx *lexer) errf(line, col int, format string, args ...interface{}) error {
-	return &LexError{Msg: msg(format, args...), Line: line, Col: col}
+	return &LexError{Msg: fmt.Sprintf(format, args...), Line: line, Col: col}
 }
 
 func (lx *lexer) peekByte() byte {

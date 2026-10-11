@@ -69,7 +69,13 @@ func (p *parser) advance() Token {
 func (p *parser) curIs(k TokenKind) bool { return p.cur().Kind == k }
 
 func (p *parser) errf(tok Token, format string, args ...interface{}) error {
-	return &ParseError{Msg: msg(format, args...), Line: tok.Line, Col: tok.Col}
+	return &ParseError{Msg: fmt.Sprintf(format, args...), Line: tok.Line, Col: tok.Col}
+}
+
+// errfID is errf for a message of this package, named by its stable ID instead of its text: the
+// wording of a refusal can change without changing which refusal it is.
+func (p *parser) errfID(tok Token, id ID, args ...any) error {
+	return &ParseError{Msg: msgID(id, args...), Line: tok.Line, Col: tok.Col}
 }
 
 func (p *parser) expect(k TokenKind, what string) (Token, error) {
@@ -1308,7 +1314,7 @@ func (p *parser) enterNesting() error {
 	p.depth++
 	if p.depth > MaxExprDepth {
 		p.depth--
-		return p.errf(p.cur(), "nesting is deeper than %d levels, the limit of this implementation: split the expression into smaller statements", MaxExprDepth)
+		return p.errfID(p.cur(), IDNestingTooDeep, MaxExprDepth)
 	}
 	return nil
 }

@@ -45,16 +45,16 @@ func SplitMacroDefs(toks []Token) ([]*MacroDef, []Token, error) {
 		pos := Pos{Line: t.Line, Col: t.Col}
 		i += 2 // consume '# macro'
 		if i >= len(toks) || toks[i].Kind != TIdent {
-			return nil, nil, errors.New(msg("ParseError: #macro 需要名字，第 %d 行", t.Line))
+			return nil, nil, errors.New(msgID(IDMacroNeedsName, t.Line))
 		}
 		name := toks[i].Text
 		i++
 		if i >= len(toks) {
-			return nil, nil, errors.New(msg("ParseError: #macro %s 缺少参数列表，第 %d 行", name, t.Line))
+			return nil, nil, errors.New(msgID(IDMacroMissingParamList, name, t.Line))
 		}
 		closeK, ok := closeOf(toks[i].Kind)
 		if !ok {
-			return nil, nil, errors.New(msg("ParseError: #macro %s 参数列表需要 () [] {} 之一，第 %d 行", name, toks[i].Line))
+			return nil, nil, errors.New(msgID(IDMacroParamListDelimiters, name, toks[i].Line))
 		}
 		params, ni, err := takeBalancedPair(toks, i, closeK)
 		if err != nil {
@@ -67,16 +67,16 @@ func SplitMacroDefs(toks []Token) ([]*MacroDef, []Token, error) {
 				continue
 			}
 			if len(pt) != 1 || pt[0].Kind != TIdent {
-				return nil, nil, errors.New(msg("ParseError: #macro %s 参数必须是名字（逗号分隔，个数不限），第 %d 行", name, t.Line))
+				return nil, nil, errors.New(msgID(IDMacroParamsMustBeNames, name, t.Line))
 			}
 			pnames = append(pnames, pt[0].Text)
 		}
 		if i >= len(toks) {
-			return nil, nil, errors.New(msg("ParseError: #macro %s 缺少主体，第 %d 行", name, t.Line))
+			return nil, nil, errors.New(msgID(IDMacroMissingBody, name, t.Line))
 		}
 		closeB, ok := closeOf(toks[i].Kind)
 		if !ok {
-			return nil, nil, errors.New(msg("ParseError: #macro %s 主体需要 () [] {} 之一，第 %d 行", name, toks[i].Line))
+			return nil, nil, errors.New(msgID(IDMacroBodyDelimiters, name, toks[i].Line))
 		}
 		body, ni, err := takeBalancedPair(toks, i, closeB)
 		if err != nil {
@@ -113,13 +113,13 @@ func takeBalancedPair(toks []Token, i int, closeK TokenKind) ([]Token, int, erro
 			depth--
 			if depth == 0 {
 				if toks[j].Kind != closeK {
-					return nil, 0, errors.New(msg("ParseError: 分隔符不配对，第 %d 行", toks[i].Line))
+					return nil, 0, errors.New(msgID(IDMacroUnbalancedDelimiters, toks[i].Line))
 				}
 				return toks[i+1 : j], j + 1, nil
 			}
 		}
 	}
-	return nil, 0, errors.New(msg("ParseError: 分隔符不配对，第 %d 行", toks[i].Line))
+	return nil, 0, errors.New(msgID(IDMacroUnbalancedDelimiters, toks[i].Line))
 }
 
 // splitTop splits a token sequence on top-level commas (ignoring commas inside ()[]{}).
@@ -171,7 +171,7 @@ func ExpandMacros(toks []Token, macros []*MacroDef) ([]Token, error) {
 						callArgs = nil
 					}
 					if len(callArgs) != len(m.Params) {
-						return nil, errors.New(msg("ParseError: 宏 %s 需要 %d 个参数，调用给了 %d 个（第 %d 行）", m.Name, len(m.Params), len(callArgs), t.Line))
+						return nil, errors.New(msgID(IDMacroArgCountMismatch, m.Name, len(m.Params), len(callArgs), t.Line))
 					}
 					subst := make(map[string][]Token, len(callArgs))
 					for p, pname := range m.Params {
@@ -179,7 +179,7 @@ func ExpandMacros(toks []Token, macros []*MacroDef) ([]Token, error) {
 					}
 					body, _, err := expandBody(m.Body, subst, m.Params)
 					if err != nil {
-						return nil, errors.New(msg("宏 %s 展开失败：%v", m.Name, err))
+						return nil, errors.New(msgID(IDMacroExpandFailed, m.Name, err))
 					}
 					out = append(out, body...)
 					i = ni
@@ -243,7 +243,7 @@ func expandBody(body []Token, subst map[string][]Token, paramOrder []string) ([]
 			continue
 		}
 		if i+1 >= len(body) || (body[i+1].Kind != TIdent && body[i+1].Kind != TReturn) {
-			return nil, false, errors.New(msg("第 %d 行：# 后必须是预处理命令（return/error）", t.Line))
+			return nil, false, errors.New(msgID(IDPpSharpNeedsCommand, t.Line))
 		}
 		cmd := body[i+1].Text
 		i += 2
@@ -263,7 +263,7 @@ func expandBody(body []Token, subst map[string][]Token, paramOrder []string) ([]
 				// that does not exist in the language. It is refused rather than skipped, because the
 				// tokens after it would otherwise be expanded as if the guard were not there — that is
 				// how `#when (compile) { #return 111 }` used to reach the output of one engine only.
-				return nil, false, errors.New(msg("第 %d 行：#%s 不是 QuarkLang 预处理指令", t.Line, cmd))
+				return nil, false, errors.New(msgID(IDPpUnknownDirective, t.Line, cmd))
 			}
 			// A line-level directive the preprocessor left behind: it already decided this line, and a
 			// macro body is the one place it cannot decide alone (the body is only meaningful at a call
@@ -276,11 +276,11 @@ func expandBody(body []Token, subst map[string][]Token, paramOrder []string) ([]
 			continue
 		}
 		if i >= len(body) {
-			return nil, false, errors.New(msg("第 %d 行：#%s 需要 ( ... )", t.Line, cmd))
+			return nil, false, errors.New(msgID(IDPpRequiresParens, t.Line, cmd))
 		}
 		closeK, ok := closeOf(body[i].Kind)
 		if !ok {
-			return nil, false, errors.New(msg("第 %d 行：#%s 需要 ( ... )", t.Line, cmd))
+			return nil, false, errors.New(msgID(IDPpRequiresParens, t.Line, cmd))
 		}
 		args, ni, err := takeBalancedPair(body, i, closeK)
 		if err != nil {
@@ -290,9 +290,9 @@ func expandBody(body []Token, subst map[string][]Token, paramOrder []string) ([]
 		switch cmd {
 		case "error":
 			if len(args) < 1 || args[0].Kind != TStr {
-				return nil, false, errors.New(msg("第 %d 行：#error 需要 (\"消息\")", t.Line))
+				return nil, false, errors.New(msgID(IDPpErrorNeedsMessage, t.Line))
 			}
-			return nil, false, errors.New(msg("第 %d 行：预处理错误 #error(%s)", t.Line, args[0].Text))
+			return nil, false, errors.New(msgID(IDPpErrorDirective, t.Line, args[0].Text))
 		case "insert":
 			// #insert(#ast(name)): splice in the tokens of parameter name; #insert(#ast(...)): splice in all parameters in order
 			inner, err := parseAstArg(args)
@@ -310,18 +310,18 @@ func expandBody(body []Token, subst map[string][]Token, paramOrder []string) ([]
 			} else {
 				captured, ok := subst[inner]
 				if !ok {
-					return nil, false, errors.New(msg("第 %d 行：#insert(#ast(%s))：%s 不是宏参数名", t.Line, inner, inner))
+					return nil, false, errors.New(msgID(IDPpInsertNotMacroParam, t.Line, inner, inner))
 				}
 				out = append(out, captured...)
 			}
 		case "execute":
 			// #execute(name): splice in an identifier token (original semantics: a name built by concatenation)
 			if len(args) < 1 || args[0].Kind != TIdent {
-				return nil, false, errors.New(msg("第 %d 行：#execute 需要 (名字)", t.Line))
+				return nil, false, errors.New(msgID(IDPpExecuteNeedsName, t.Line))
 			}
 			out = append(out, Token{Kind: TIdent, Text: args[0].Text, Line: t.Line, Col: t.Col})
 		default:
-			return nil, false, errors.New(msg("第 %d 行：未知预处理命令 #%s", t.Line, cmd))
+			return nil, false, errors.New(msgID(IDPpUnknownCommand, t.Line, cmd))
 		}
 	}
 	return out, false, nil
@@ -331,7 +331,7 @@ func expandBody(body []Token, subst map[string][]Token, paramOrder []string) ([]
 func parseAstArg(args []Token) (string, error) {
 	if len(args) < 4 || args[0].Kind != TSharp || args[1].Kind != TIdent || args[1].Text != "ast" ||
 		args[2].Kind != TLParen || args[len(args)-1].Kind != TRParen {
-		return "", errors.New(msg("#insert 需要 (#ast(名字)) 形式"))
+		return "", errors.New(msgID(IDPpInsertNeedsAst))
 	}
 	if len(args) >= 5 && args[3].Kind == TDot && args[4].Kind == TDot && len(args) >= 6 && args[5].Kind == TDot {
 		return "...", nil
@@ -339,7 +339,7 @@ func parseAstArg(args []Token) (string, error) {
 	if args[3].Kind == TIdent {
 		return args[3].Text, nil
 	}
-	return "", errors.New(msg("#insert 需要 (#ast(名字)) 形式"))
+	return "", errors.New(msgID(IDPpInsertNeedsAst))
 }
 
 // String renders it for error messages.

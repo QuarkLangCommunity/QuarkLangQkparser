@@ -99,7 +99,7 @@ func (c *Context) Process(src, filename string) (string, error) {
 func (c *Context) ProcessMapped(src, filename string) (Result, error) {
 	c.applyHostDefaults()
 	if c.depth > 16 {
-		return Result{}, errors.New(msg("预处理 #include 层数过深（>16）：%s", filename))
+		return Result{}, errors.New(msgID(IDPpIncludeTooDeep, filename))
 	}
 	var out sourceText
 	out.srcLines = len(strings.Split(src, "\n"))
@@ -128,7 +128,7 @@ func (c *Context) ProcessMapped(src, filename string) (Result, error) {
 				active = top.active
 			} else { // elif
 				if len(stack) == 0 {
-					return Result{}, errors.New(msg("%s:%d: #elif 没有对应的 #if", filename, i+1))
+					return Result{}, errors.New(msgID(IDPpElifWithoutIf, filename, i+1))
 				}
 				top := &stack[len(stack)-1]
 				top.active = top.parentActive && !top.taken && cond
@@ -142,7 +142,7 @@ func (c *Context) ProcessMapped(src, filename string) (Result, error) {
 			switch m[1] {
 			case "else", "endif":
 				if len(stack) == 0 {
-					return Result{}, errors.New(msg("%s:%d: #%s 没有对应的 #if", filename, i+1, m[1]))
+					return Result{}, errors.New(msgID(IDPpBranchWithoutIf, filename, i+1, m[1]))
 				}
 				// The frame is read before the pop: a pointer into the stack outlives its element, and
 				// reading it after the shrink reports whatever the next push writes there.
@@ -198,7 +198,7 @@ func (c *Context) ProcessMapped(src, filename string) (Result, error) {
 			inc := c.includePath(filename, m[1])
 			b, err := os.ReadFile(inc)
 			if err != nil {
-				return Result{}, errors.New(msg("%s:%d: #include 失败：%v", filename, i+1, err))
+				return Result{}, errors.New(msgID(IDPpIncludeFailed, filename, i+1, err))
 			}
 			c.depth++
 			sub, err := c.ProcessMapped(string(b), inc)
@@ -219,7 +219,7 @@ func (c *Context) ProcessMapped(src, filename string) (Result, error) {
 		}
 	}
 	if len(stack) != 0 {
-		return Result{}, errors.New(msg("%s: 有 %d 个 #if 未闭合（缺 #endif）", filename, len(stack)))
+		return Result{}, errors.New(msgID(IDPpUnclosedIf, filename, len(stack)))
 	}
 	return Result{Text: out.String(), Map: out.LineMap()}, nil
 }
@@ -404,7 +404,7 @@ func (c *Context) evalUnary(e string) (bool, error) {
 	if reDefineNm.MatchString(e) {
 		return c.Defines[e], nil
 	}
-	return false, errors.New(msg("无法识别的条件表达式：%q", e))
+	return false, errors.New(msgID(IDPpUnrecognizedCondition, e))
 }
 
 // splitTopExpr splits on top-level operators (ignoring what is inside parentheses).
