@@ -68,26 +68,23 @@ func (p *parser) advance() Token {
 
 func (p *parser) curIs(k TokenKind) bool { return p.cur().Kind == k }
 
-func (p *parser) errf(tok Token, format string, args ...interface{}) error {
-	return &ParseError{Msg: fmt.Sprintf(format, args...), Line: tok.Line, Col: tok.Col}
-}
-
-// errfID is errf for a message of this package, named by its stable ID instead of its text: the
-// wording of a refusal can change without changing which refusal it is.
+// errfID renders a message of this package in the installed localizer's language. It is the only way
+// this package refuses anything: a call site names an ID, never a text, so rephrasing a message
+// cannot change which message it is.
 func (p *parser) errfID(tok Token, id ID, args ...any) error {
 	return &ParseError{Msg: msgID(id, args...), Line: tok.Line, Col: tok.Col}
 }
 
 func (p *parser) expect(k TokenKind, what string) (Token, error) {
 	if !p.curIs(k) {
-		return Token{}, p.errf(p.cur(), "expected %s, got %s", what, p.cur().Kind)
+		return Token{}, p.errfID(p.cur(), IDExpectedGot, what, p.cur().Kind)
 	}
 	return p.advance(), nil
 }
 
 func (p *parser) expectIdent(what string) (Token, error) {
 	if !p.curIs(TIdent) {
-		return Token{}, p.errf(p.cur(), "expected %s, got %s", what, p.cur().Kind)
+		return Token{}, p.errfID(p.cur(), IDExpectedGot, what, p.cur().Kind)
 	}
 	return p.advance(), nil
 }
@@ -98,7 +95,7 @@ func (p *parser) expectMemberName(what string) (Token, error) {
 	if isWordToken(p.cur().Kind) {
 		return p.advance(), nil
 	}
-	return Token{}, p.errf(p.cur(), "expected %s, got %s", what, p.cur().Kind)
+	return Token{}, p.errfID(p.cur(), IDExpectedGot, what, p.cur().Kind)
 }
 
 // isBuiltinTypeName reports whether a name is a builtin type (used by type-first declarations).
@@ -136,7 +133,7 @@ func (p *parser) parseProgram() (*Program, error) {
 				return nil, err
 			}
 			if sd.Name != "" {
-				return nil, p.errf(p.cur(), "实名结构体必须写 type：type struct { ... } %s;", sd.Name)
+				return nil, p.errfID(p.cur(), IDNamedStructRequiresType, sd.Name)
 			}
 			prog.Structs = append(prog.Structs, sd)
 		case TInterface:
@@ -145,7 +142,7 @@ func (p *parser) parseProgram() (*Program, error) {
 				return nil, err
 			}
 			if id.Name != "" {
-				return nil, p.errf(p.cur(), "实名接口必须写 type：type interface { ... } %s;", id.Name)
+				return nil, p.errfID(p.cur(), IDNamedInterfaceRequiresType, id.Name)
 			}
 			prog.Interfaces = append(prog.Interfaces, id)
 		case TImpl:
@@ -198,7 +195,7 @@ func (p *parser) parseProgram() (*Program, error) {
 					im := &ImplDecl{Pos: Pos{Line: p.cur().Line, Col: p.cur().Col}}
 					for !p.curIs(TRBrace) {
 						if p.curIs(TEOF) {
-							return nil, p.errf(p.cur(), "unterminated space body")
+							return nil, p.errfID(p.cur(), IDUnterminatedSpaceBody)
 						}
 						m, err := p.parseFunc()
 						if err != nil {
@@ -238,10 +235,10 @@ func (p *parser) parseProgram() (*Program, error) {
 						p.advance()
 						for !p.curIs(TRBrace) {
 							if p.curIs(TEOF) {
-								return nil, p.errf(p.cur(), "unterminated library body")
+								return nil, p.errfID(p.cur(), IDUnterminatedLibraryBody)
 							}
 							if !p.curIs(TFunc) {
-								return nil, p.errf(p.cur(), "library 体内只能有 fn 符号签名")
+								return nil, p.errfID(p.cur(), IDLibraryBodySignaturesOnly)
 							}
 							kw := p.advance()
 							name, err := p.expectIdent("function symbol name")
@@ -286,7 +283,7 @@ func (p *parser) parseProgram() (*Program, error) {
 						return nil, err
 					}
 					if kind.Text != "main" && kind.Text != "library" && kind.Text != "lib" {
-						return nil, p.errf(kind, "program 声明只支持 main / library（lib）")
+						return nil, p.errfID(kind, IDProgramOnlyMainOrLibrary)
 					}
 					if kind.Text == "lib" {
 						kind.Text = "library"
@@ -295,7 +292,7 @@ func (p *parser) parseProgram() (*Program, error) {
 						return nil, err
 					}
 					if prog.Kind != "" {
-						return nil, p.errf(kind, "重复的 program 预制宏")
+						return nil, p.errfID(kind, IDDuplicateProgramMacro)
 					}
 					prog.Kind = kind.Text
 					prog.kindSet = true
@@ -333,7 +330,7 @@ func (p *parser) parseProgram() (*Program, error) {
 								return nil, err
 							}
 							if sd.Name == "" {
-								return nil, p.errf(p.cur(), "pub 的匿名结构体没有名字可导出：pub type struct { ... } Name;")
+								return nil, p.errfID(p.cur(), IDAnonStructHasNoName)
 							}
 							prog.Pub = append(prog.Pub, sd.Name)
 							prog.Structs = append(prog.Structs, sd)
@@ -343,17 +340,17 @@ func (p *parser) parseProgram() (*Program, error) {
 								return nil, err
 							}
 							if id.Name == "" {
-								return nil, p.errf(p.cur(), "pub 的匿名接口没有名字可导出：pub type interface { ... } Name;")
+								return nil, p.errfID(p.cur(), IDAnonInterfaceHasNoName)
 							}
 							prog.Pub = append(prog.Pub, id.Name)
 							prog.Interfaces = append(prog.Interfaces, id)
 						default:
-							return nil, p.errf(p.cur(), "pub type 只支持 struct / interface")
+							return nil, p.errfID(p.cur(), IDPubTypeOnlyStructOrInterface)
 						}
 						continue
 					}
 					if p.cur().Kind != TFunc {
-						return nil, p.errf(p.cur(), "pub 只能前缀于 fn 或 type struct/interface（实名类型必须写 type）")
+						return nil, p.errfID(p.cur(), IDPubPrefixRestricted)
 					}
 					fn, err := p.parseFunc()
 					if err != nil {
@@ -365,9 +362,9 @@ func (p *parser) parseProgram() (*Program, error) {
 				}
 			}
 			if p.curIs(TIdent) && p.cur().Text == "func" {
-				return nil, p.errf(p.cur(), "函数声明关键字是 fn：func main(...) 应写为 fn main(...)")
+				return nil, p.errfID(p.cur(), IDFunctionKeywordIsFn)
 			}
-			return nil, p.errf(p.cur(), "expected a top-level declaration (fn/struct/impl/interface/program/import/pub), got %s", p.cur().Kind)
+			return nil, p.errfID(p.cur(), IDExpectedTopLevelDeclaration, p.cur().Kind)
 		}
 	}
 	return prog, nil
@@ -376,7 +373,7 @@ func (p *parser) parseProgram() (*Program, error) {
 func (p *parser) parseFunc() (*FuncDecl, error) {
 	kw := p.cur()
 	if !p.curIs(TFunc) {
-		return nil, p.errf(p.cur(), "expected 'fn'")
+		return nil, p.errfID(p.cur(), IDExpectedFn)
 	}
 	p.advance()
 	var typeParams []string
@@ -422,7 +419,7 @@ func (p *parser) parseFunc() (*FuncDecl, error) {
 	} else if name.Text == "main" {
 		fn.Ret = "void"
 	} else {
-		return nil, p.errf(p.cur(), "函数必须声明返回类型：fn %s(...) 返回类型 { ... }", name.Text)
+		return nil, p.errfID(p.cur(), IDFunctionNeedsReturnType, name.Text)
 	}
 	startTok := p.cur() // before parseBlock: the first token after '{' (start line)
 	body, err := p.parseBlock()
@@ -545,7 +542,7 @@ func (p *parser) parseStructBody(kw Token) (*StructDecl, error) {
 	}
 	for !p.curIs(TRBrace) {
 		if p.curIs(TEOF) {
-			return nil, p.errf(p.cur(), "unterminated struct body (missing '}')")
+			return nil, p.errfID(p.cur(), IDUnterminatedStructBody)
 		}
 		typ, err := p.parseType()
 		if err != nil {
@@ -646,7 +643,7 @@ func (p *parser) parseInterfaceBody(kw Token) (*InterfaceDecl, error) {
 	}
 	for !p.curIs(TRBrace) {
 		if p.curIs(TEOF) {
-			return nil, p.errf(p.cur(), "unterminated interface body (missing '}')")
+			return nil, p.errfID(p.cur(), IDUnterminatedInterfaceBody)
 		}
 		// expand interface Name;  composes interfaces (xmind §interfaces; may carry the dynamic prefix)
 		if p.curIs(TIdent) && (p.cur().Text == "expand" || (p.cur().Text == "dynamic" && p.peekTextIs("expand"))) {
@@ -688,7 +685,7 @@ func (p *parser) parseAnonTypeName() (string, error) {
 			return "", err
 		}
 		if len(sd.TypeParams) > 0 {
-			return "", p.errf(kw, "匿名 struct 类型不支持泛型参数（请写 type struct<T> { ... } Name;）")
+			return "", p.errfID(kw, IDAnonStructNoGenerics)
 		}
 		key := anonStructKey(sd)
 		if n, ok := p.anonByKey[key]; ok {
@@ -708,7 +705,7 @@ func (p *parser) parseAnonTypeName() (string, error) {
 		return "", err
 	}
 	if len(id.TypeParams) > 0 {
-		return "", p.errf(kw, "匿名 interface 类型不支持泛型参数（请写 type interface<T> { ... } Name;）")
+		return "", p.errfID(kw, IDAnonInterfaceNoGenerics)
 	}
 	if len(id.Methods) == 0 && len(id.Expands) == 0 {
 		return "interface{}", nil // empty interface = void (existing semantics unchanged)
@@ -789,7 +786,7 @@ func (p *parser) parseImpl() (*ImplDecl, error) {
 	}
 	for !p.curIs(TRBrace) {
 		if p.curIs(TEOF) {
-			return nil, p.errf(p.cur(), "unterminated impl body (missing '}')")
+			return nil, p.errfID(p.cur(), IDUnterminatedImplBody)
 		}
 		fn, err := p.parseFunc()
 		if err != nil {
@@ -856,7 +853,7 @@ func (p *parser) parseType() (string, error) {
 		depth := 1
 		for depth > 0 {
 			if p.curIs(TEOF) {
-				return "", p.errf(p.cur(), "unterminated function type")
+				return "", p.errfID(p.cur(), IDUnterminatedFunctionType)
 			}
 			if p.curIs(TLt) {
 				depth++
@@ -891,7 +888,7 @@ func (p *parser) parseType() (string, error) {
 		depth := 1
 		for depth > 0 {
 			if p.curIs(TEOF) {
-				return "", p.errf(p.cur(), "unterminated type arguments in %q", name)
+				return "", p.errfID(p.cur(), IDUnterminatedTypeArguments, name)
 			}
 			if p.curIs(TLt) {
 				depth++
@@ -941,7 +938,7 @@ func (p *parser) parseBlock() (*Block, error) {
 	b := &Block{}
 	for !p.curIs(TRBrace) {
 		if p.curIs(TEOF) {
-			return nil, p.errf(p.cur(), "unterminated block (missing '}')")
+			return nil, p.errfID(p.cur(), IDUnterminatedBlock)
 		}
 		st, err := p.parseStmt()
 		if err != nil {
@@ -1430,7 +1427,7 @@ func (p *parser) parsePostfix() (Expr, error) {
 			}
 			id, ok := x.(*Ident)
 			if !ok {
-				return nil, p.errf(name, "'::' requires an identifier on the left")
+				return nil, p.errfID(name, IDScopeRequiresIdentifier)
 			}
 			x = &ScopeCall{Scope: id.Name, Name: name.Text, Args: args, Pos: Pos{Line: name.Line, Col: name.Col}}
 		case p.curIs(TAt):
@@ -1445,10 +1442,10 @@ func (p *parser) parsePostfix() (Expr, error) {
 			}
 			call, ok := x.(*CallExpr)
 			if !ok {
-				return nil, p.errf(sname, "@ signature must follow a function call")
+				return nil, p.errfID(sname, IDSignatureMustFollowCall)
 			}
 			if call.Sign != nil {
-				return nil, p.errf(sname, "duplicate signature on one call")
+				return nil, p.errfID(sname, IDDuplicateSignature)
 			}
 			call.Sign = &SignCall{Name: sname.Text, Args: sargs}
 		default:
@@ -1516,7 +1513,7 @@ func (p *parser) parsePrimary() (Expr, error) {
 	case TInt:
 		p.advance()
 		if tok.Int > 2147483647 || tok.Int < -2147483648 {
-			return nil, p.errf(tok, "int literal %d out of 32-bit range (int is 32-bit, like C)", tok.Int)
+			return nil, p.errfID(tok, IDIntLiteralOutOfRange, tok.Int)
 		}
 		return &IntLit{V: tok.Int, Pos: pos}, nil
 	case TFloat:
@@ -1629,5 +1626,5 @@ func (p *parser) parsePrimary() (Expr, error) {
 		}
 		return x, nil
 	}
-	return nil, p.errf(tok, "unexpected token %s in expression", tok.Kind)
+	return nil, p.errfID(tok, IDUnexpectedTokenInExpression, tok.Kind)
 }
