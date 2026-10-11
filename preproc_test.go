@@ -201,3 +201,37 @@ func TestPreprocUndef(t *testing.T) {
 		t.Fatalf("#undef 没有生效：%q", out)
 	}
 }
+
+// TestPreprocAlignedKeepsLineNumbers: a caller that reports positions in the file the author wrote — the
+// linter, the language server, the doc renderer — reads the program with the consumed lines kept as empty
+// ones, so line n of the result is line n of the input and no line map is needed.
+func TestPreprocAlignedKeepsLineNumbers(t *testing.T) {
+	src := "#ifdef EXPLAIN\nint x = 1;\n#endif\nint y = 2;\nint z = 3;\n"
+	ctx := NewContext("EXPLAIN")
+	ctx.Aligned = true
+	out, err := ctx.Process(src, "t.qk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "\nint x = 1;\n\nint y = 2;\nint z = 3;\n"
+	if out != want {
+		t.Fatalf("对齐模式错误：%q，期望 %q", out, want)
+	}
+	if strings.Count(out, "\n") != strings.Count(src, "\n") {
+		t.Fatalf("行数没有保持：%d vs %d", strings.Count(out, "\n"), strings.Count(src, "\n"))
+	}
+}
+
+// TestPreprocAlignedDropsTheOtherBranch: alignment preserves the line count, not the content of a branch
+// that was not taken.
+func TestPreprocAlignedDropsTheOtherBranch(t *testing.T) {
+	ctx := NewContext("EXPLAIN")
+	ctx.Aligned = true
+	out, err := ctx.Process("#ifdef COMPILE\ncompiled;\n#endif\nkept;\n", "t.qk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "compiled") || out != "\n\n\nkept;\n" {
+		t.Fatalf("对齐模式保留了未选中的分支：%q", out)
+	}
+}

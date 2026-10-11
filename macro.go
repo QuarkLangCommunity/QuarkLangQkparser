@@ -205,6 +205,16 @@ func macroCallExcluded(i int, toks []Token) bool {
 	return false
 }
 
+// macroCommand reports whether a `#` command is one this stage implements; the rest belong to the
+// line-level preprocessor or to a stage that does not exist yet.
+func macroCommand(cmd string) bool {
+	switch cmd {
+	case "return", "error", "insert", "execute":
+		return true
+	}
+	return false
+}
+
 // expandBody expands a macro body: parameters are replaced by name;
 // #return <token...> is the macro's return value (the expansion result is the tokens after the return directive, with parameters substituted) and terminates the whole expansion immediately;
 // #error("msg") reports an error directly; #insert/#execute/#ast were removed with the pattern syntax.
@@ -237,6 +247,18 @@ func expandBody(body []Token, subst map[string][]Token, paramOrder []string) ([]
 			}
 			out = append(out, sub...)
 			return out, true, nil
+		}
+		if !macroCommand(cmd) {
+			// A directive this stage does not implement — a line-level one the preprocessor left for
+			// whoever owns it (`#if`, `#ifdef`, `#endif`, `#define`, …), or one nothing implements yet
+			// (`#expand`, `#run`, §7.2). It is dropped rather than refused: the preprocessor decided it
+			// already, and refusing here would make a legal guarded body unexpandable.
+			if i < len(body) && body[i].Kind == TLParen {
+				if _, ni, err := takeBalancedPair(body, i, TRParen); err == nil {
+					i = ni
+				}
+			}
+			continue
 		}
 		if i >= len(body) {
 			return nil, false, errors.New(msg("第 %d 行：#%s 需要 ( ... )", t.Line, cmd))

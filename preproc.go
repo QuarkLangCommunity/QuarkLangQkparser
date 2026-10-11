@@ -42,6 +42,11 @@ type Context struct {
 	OS      string          // "linux" / "darwin" / "windows"; the host when empty
 	Arch    string          // "x86_64" / "arm64"; the host when empty
 	Defines map[string]bool // the defined symbols; a predefined engine symbol starts here
+	// Aligned keeps the line numbering: a line the preprocessor consumes contributes an empty line
+	// instead of disappearing, so a reader of the result (a linter, a language server, a doc renderer)
+	// can keep reporting positions in the file the author wrote without carrying a line map. The engines
+	// leave it off: they want the program, not a position-preserving view of it.
+	Aligned bool
 	depth   int
 }
 
@@ -98,6 +103,7 @@ func (c *Context) ProcessMapped(src, filename string) (Result, error) {
 	}
 	var out sourceText
 	out.srcLines = len(strings.Split(src, "\n"))
+	out.aligned = c.Aligned
 	lines := strings.Split(src, "\n")
 	// active: whether the current branch emits; taken: whether a branch in this group already matched
 	type frame struct{ active, taken, parentActive bool }
@@ -129,7 +135,7 @@ func (c *Context) ProcessMapped(src, filename string) (Result, error) {
 				top.taken = top.taken || cond
 				active = top.active
 			}
-			out.drop()
+			out.consume()
 			continue
 		}
 		if m := reDirLine.FindStringSubmatch(strings.TrimSpace(ln)); m != nil {
@@ -151,7 +157,7 @@ func (c *Context) ProcessMapped(src, filename string) (Result, error) {
 					stack = stack[:len(stack)-1]
 					active = f.parentActive
 				}
-				out.drop()
+				out.consume()
 				continue
 			case "define":
 				if active {
@@ -159,13 +165,13 @@ func (c *Context) ProcessMapped(src, filename string) (Result, error) {
 						c.Defines[nm] = true
 					}
 				}
-				out.drop()
+				out.consume()
 				continue
 			case "undef":
 				if active {
 					delete(c.Defines, strings.TrimSpace(m[2]))
 				}
-				out.drop()
+				out.consume()
 				continue
 			case "ifdef", "ifndef":
 				cond := c.Defines[strings.TrimSpace(m[2])]
@@ -174,19 +180,19 @@ func (c *Context) ProcessMapped(src, filename string) (Result, error) {
 				}
 				stack = append(stack, frame{active: active && cond, taken: cond, parentActive: active})
 				active = stack[len(stack)-1].active
-				out.drop()
+				out.consume()
 				continue
 			case "error":
 				if active {
 					return Result{}, fmt.Errorf("%s:%d: #error %s", filename, i+1, strings.TrimSpace(m[2]))
 				}
-				out.drop()
+				out.consume()
 				continue
 			}
 		}
 		if m := reInclude.FindStringSubmatch(ln); m != nil {
 			if !active {
-				out.drop()
+				out.consume()
 				continue
 			}
 			inc := c.includePath(filename, m[1])
@@ -209,7 +215,7 @@ func (c *Context) ProcessMapped(src, filename string) (Result, error) {
 		if active {
 			out.keep(ln, i+1)
 		} else {
-			out.drop()
+			out.consume()
 		}
 	}
 	if len(stack) != 0 {
@@ -228,6 +234,7 @@ func (c *Context) ProcessMapped(src, filename string) (Result, error) {
 type sourceText struct {
 	lines    []string
 	origins  []int
+	aligned  bool
 	srcLines int  // how many lines the input has, so the trailing empty element is recognised
 	trailing bool // the input ended in a newline, so the result has to as well
 }
@@ -235,7 +242,7 @@ type sourceText struct {
 // keep adds one surviving input line together with the line it came from; the empty last element a
 // trailing newline produces is not a line, and only the join may write it back.
 func (s *sourceText) keep(text string, line int) {
-	if text == "" && line == s.srcLines {
+	if text == "" && line == s.srcLines && !s.aligned {
 		s.trailing = true
 		return
 	}
@@ -243,8 +250,14 @@ func (s *sourceText) keep(text string, line int) {
 	s.origins = append(s.origins, line)
 }
 
-// drop consumes one line the preprocessor decided not to emit: it contributes nothing to the result.
-func (s *sourceText) drop() {}
+// consume takes one line the preprocessor decided not to emit: it contributes nothing unless the caller
+// asked for aligned output, in which case it contributes its (empty) line.
+func (s *sourceText) consume() {
+	if s.aligned {
+		s.lines = append(s.lines, "")
+		s.origins = append(s.origins, 0)
+	}
+}
 
 // add splices text that came from no line of the input (an #include): it joins it as one more element of
 // the result, contributing one result line per line of that text and no line in this file.
