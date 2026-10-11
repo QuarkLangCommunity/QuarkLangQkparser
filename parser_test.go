@@ -1,7 +1,6 @@
 package qkparser
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 )
@@ -29,16 +28,12 @@ func functionNames(prog *Program) []string {
 	return names
 }
 
-// prefixLocalizer renders every template with a fixed prefix, which makes the seam observable.
-type prefixLocalizer struct{ prefix string }
+// prefixMessages renders every message with a fixed prefix, which makes the seam observable: the ID
+// decides which message it is, and the installed localizer decides how it reads.
+type prefixMessages struct{ prefix string }
 
-// T renders the template (and its arguments) behind the prefix.
-func (p prefixLocalizer) T(template string, args ...any) string {
-	if len(args) == 0 {
-		return p.prefix + template
-	}
-	return p.prefix + fmt.Sprintf(template, args...)
-}
+// Msg renders the message named by id, with its arguments, behind the prefix.
+func (p prefixMessages) Msg(id ID, args ...any) string { return p.prefix + RenderSource(id, args...) }
 
 // TestParseSourceCollectsFunctionNames: the frontend entry point returns the parsed functions, which
 // is what a tool needs to list them.
@@ -132,9 +127,9 @@ func TestParseErrorCarriesPosition(t *testing.T) {
 // TestSetLocalizerRoutesMessages: the package renders messages through the installed localizer, so an
 // embedder can translate them without this package depending on a catalog.
 func TestSetLocalizerRoutesMessages(t *testing.T) {
-	prev := SetLocalizer(prefixLocalizer{prefix: "[probe] "})
+	prev := SetLocalizer(prefixMessages{prefix: "[probe] "})
 	defer SetLocalizer(prev)
-	_, err := ParseSource("fn main(IOStream io) void {\n    int x = ;\n}\n")
+	_, err := ParseSource("fn main(IOStream io) void {\n    #macro\n}\n")
 	if err == nil {
 		t.Fatal("expected a parse error")
 	}
@@ -143,14 +138,14 @@ func TestSetLocalizerRoutesMessages(t *testing.T) {
 	}
 }
 
-// TestDefaultLocalizerRendersTemplatesVerbatim: with no localizer installed the templates render
-// unchanged, which is why the package needs no message catalog of its own.
-func TestDefaultLocalizerRendersTemplatesVerbatim(t *testing.T) {
-	if got := (verbatim{}).T("boom %d", 7); got != "boom 7" {
-		t.Fatalf("verbatim localizer rendered %q", got)
+// TestSourceLocalizerRendersTheAuthoredEnglish: with no localizer installed the package renders its
+// own authored English text — the source text of the ID, out of the packed blob.
+func TestSourceLocalizerRendersTheAuthoredEnglish(t *testing.T) {
+	if got := (sourceLocalizer{}).Msg(IDNestingTooDeep, 7); !strings.Contains(got, "7 levels") {
+		t.Fatalf("source localizer rendered %q", got)
 	}
-	if got := (verbatim{}).T("no verbs"); got != "no verbs" {
-		t.Fatalf("verbatim localizer rendered %q", got)
+	if got := (sourceLocalizer{}).Msg(IDPpInsertNeedsAst); got != "#insert 需要 (#ast(名字)) 形式" {
+		t.Fatalf("source localizer rendered %q", got)
 	}
 }
 
