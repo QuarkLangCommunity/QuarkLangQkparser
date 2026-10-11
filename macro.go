@@ -145,8 +145,9 @@ func splitTop(toks []Token) [][]Token {
 }
 
 // ExpandMacros expands named macro calls in a token stream: name(args)/name[args]/name{args}.
-// mode is the dynamic preprocessing state ("run"/"compile"/"explain"); bodies are not re-expanded recursively.
-func ExpandMacros(toks []Token, macros []*MacroDef, mode string) ([]Token, error) {
+// Bodies are not re-expanded recursively, and there is no operation-time switch to make: which engine is
+// expanding was decided before lexing, by the symbol the preprocessor defined (spec §7.2).
+func ExpandMacros(toks []Token, macros []*MacroDef) ([]Token, error) {
 	if len(macros) == 0 {
 		return toks, nil
 	}
@@ -176,7 +177,7 @@ func ExpandMacros(toks []Token, macros []*MacroDef, mode string) ([]Token, error
 					for p, pname := range m.Params {
 						subst[pname] = callArgs[p]
 					}
-					body, _, err := expandBody(m.Body, subst, mode, m.Params)
+					body, _, err := expandBody(m.Body, subst, m.Params)
 					if err != nil {
 						return nil, errors.New(msg("宏 %s 展开失败：%v", m.Name, err))
 					}
@@ -204,11 +205,11 @@ func macroCallExcluded(i int, toks []Token) bool {
 	return false
 }
 
-// expandBody expands a macro body: parameters are replaced by name; #when (compile|run) { ... } selects a block by state;
+// expandBody expands a macro body: parameters are replaced by name;
 // #return <token...> is the macro's return value (the expansion result is the tokens after the return directive, with parameters substituted) and terminates the whole expansion immediately;
 // #error("msg") reports an error directly; #insert/#execute/#ast were removed with the pattern syntax.
 // Returns (output, whether a #return terminated it).
-func expandBody(body []Token, subst map[string][]Token, mode string, paramOrder []string) ([]Token, bool, error) {
+func expandBody(body []Token, subst map[string][]Token, paramOrder []string) ([]Token, bool, error) {
 	var out []Token
 	i := 0
 	for i < len(body) {
@@ -223,14 +224,14 @@ func expandBody(body []Token, subst map[string][]Token, mode string, paramOrder 
 			continue
 		}
 		if i+1 >= len(body) || (body[i+1].Kind != TIdent && body[i+1].Kind != TReturn) {
-			return nil, false, errors.New(msg("第 %d 行：# 后必须是预处理命令（when/return/error）", t.Line))
+			return nil, false, errors.New(msg("第 %d 行：# 后必须是预处理命令（return/error）", t.Line))
 		}
 		cmd := body[i+1].Text
 		i += 2
 		if cmd == "return" {
 			// #return <expr>: the shown result is everything after the return directive (parameters substituted + later directives still processed),
 			// e.g. #return #insert(#ast(a)); and it terminates the whole macro expansion.
-			sub, _, err := expandBody(body[i:], subst, mode, paramOrder)
+			sub, _, err := expandBody(body[i:], subst, paramOrder)
 			if err != nil {
 				return nil, false, err
 			}
@@ -250,28 +251,6 @@ func expandBody(body []Token, subst map[string][]Token, mode string, paramOrder 
 		}
 		i = ni
 		switch cmd {
-		case "when":
-			if len(args) < 1 || args[0].Kind != TIdent {
-				return nil, false, errors.New(msg("第 %d 行：#when 需要 (compile|run)", t.Line))
-			}
-			if i >= len(body) || body[i].Kind != TLBrace {
-				return nil, false, errors.New(msg("第 %d 行：#when 需要 { ... } 块", t.Line))
-			}
-			blk, ni, err := takeBalancedPair(body, i, TRBrace)
-			if err != nil {
-				return nil, false, err
-			}
-			i = ni
-			if args[0].Text == mode || (mode == "explain" && args[0].Text == "run") {
-				sub, stop, err := expandBody(blk, subst, mode, paramOrder)
-				if err != nil {
-					return nil, false, err
-				}
-				out = append(out, sub...)
-				if stop {
-					return out, true, nil
-				}
-			}
 		case "error":
 			if len(args) < 1 || args[0].Kind != TStr {
 				return nil, false, errors.New(msg("第 %d 行：#error 需要 (\"消息\")", t.Line))

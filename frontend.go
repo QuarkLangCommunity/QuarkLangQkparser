@@ -31,7 +31,7 @@ func ParseSourceAll(src string) (*Program, []Comment, []*MacroDef, error) {
 		return nil, nil, nil, err
 	}
 	if len(macros) > 0 {
-		rest, err = ExpandMacros(rest, macros, "explain")
+		rest, err = ExpandMacros(rest, macros)
 		if err != nil {
 			return nil, nil, nil, err
 		}

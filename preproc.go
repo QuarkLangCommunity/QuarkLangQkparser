@@ -56,15 +56,49 @@ func NewContext(defines ...string) *Context {
 	return c
 }
 
+// LineMap records where each line of a preprocessed result came from: Original[i] is the 1-based line of
+// the file Process was given that produced output line i+1, and 0 marks a line the preprocessor itself
+// contributed (the text spliced in for an #include). It exists because preprocessing changes line
+// numbers, and a diagnostic, a source map or a breakpoint has to name the line the author wrote.
+type LineMap struct {
+	Original []int
+}
+
+// SourceLine converts a line of preprocessed text back to the line of the file it was written in; the
+// second result is false when the line has no source (it came from an #include).
+func (m LineMap) SourceLine(line int) (int, bool) {
+	if line < 1 || line > len(m.Original) {
+		return 0, false
+	}
+	if m.Original[line-1] == 0 {
+		return 0, false
+	}
+	return m.Original[line-1], true
+}
+
+// Result is one preprocessed file: the surviving text and the map back to its lines.
+type Result struct {
+	Text string
+	Map  LineMap
+}
+
 // Process preprocesses one source file and returns the lines that survive; the filename is used for
 // `#include` resolution and for the position in every diagnostic.
 func (c *Context) Process(src, filename string) (string, error) {
+	r, err := c.ProcessMapped(src, filename)
+	return r.Text, err
+}
+
+// ProcessMapped is Process plus the map from the result's lines back to the lines of src — what a caller
+// needs to keep reporting positions in the file the author wrote.
+func (c *Context) ProcessMapped(src, filename string) (Result, error) {
 	c.applyHostDefaults()
 	if c.depth > 16 {
-		return "", errors.New(msg("预处理 #include 层数过深（>16）：%s", filename))
+		return Result{}, errors.New(msg("预处理 #include 层数过深（>16）：%s", filename))
 	}
+	var out sourceText
+	out.srcLines = len(strings.Split(src, "\n"))
 	lines := strings.Split(src, "\n")
-	var out []string
 	// active: whether the current branch emits; taken: whether a branch in this group already matched
 	type frame struct{ active, taken, parentActive bool }
 	stack := []frame{}
@@ -76,7 +110,7 @@ func (c *Context) Process(src, filename string) (string, error) {
 			if active || len(stack) > 0 {
 				c0, err := c.eval(expr)
 				if err != nil {
-					return "", fmt.Errorf("%s:%d: %v", filename, i+1, err)
+					return Result{}, fmt.Errorf("%s:%d: %v", filename, i+1, err)
 				}
 				cond = c0
 			}
@@ -88,33 +122,36 @@ func (c *Context) Process(src, filename string) (string, error) {
 				active = top.active
 			} else { // elif
 				if len(stack) == 0 {
-					return "", errors.New(msg("%s:%d: #elif 没有对应的 #if", filename, i+1))
+					return Result{}, errors.New(msg("%s:%d: #elif 没有对应的 #if", filename, i+1))
 				}
 				top := &stack[len(stack)-1]
 				top.active = top.parentActive && !top.taken && cond
 				top.taken = top.taken || cond
 				active = top.active
 			}
+			out.drop()
 			continue
 		}
 		if m := reDirLine.FindStringSubmatch(strings.TrimSpace(ln)); m != nil {
 			switch m[1] {
-			case "else":
+			case "else", "endif":
 				if len(stack) == 0 {
-					return "", errors.New(msg("%s:%d: #else 没有对应的 #if", filename, i+1))
+					return Result{}, errors.New(msg("%s:%d: #%s 没有对应的 #if", filename, i+1, m[1]))
 				}
-				top := &stack[len(stack)-1]
-				top.active = top.parentActive && !top.taken
-				top.taken = true
-				active = top.active
-				continue
-			case "endif":
-				if len(stack) == 0 {
-					return "", errors.New(msg("%s:%d: #endif 没有对应的 #if", filename, i+1))
-				}
+				// The frame is read before the pop: a pointer into the stack outlives its element, and
+				// reading it after the shrink reports whatever the next push writes there.
+				// Closed group: what is active is what enclosed it, not what the group selected.
 				f := stack[len(stack)-1]
-				stack = stack[:len(stack)-1]
-				active = f.parentActive
+				if m[1] == "else" {
+					f.active = f.parentActive && !f.taken
+					f.taken = true
+					stack[len(stack)-1] = f
+					active = f.active
+				} else {
+					stack = stack[:len(stack)-1]
+					active = f.parentActive
+				}
+				out.drop()
 				continue
 			case "define":
 				if active {
@@ -122,63 +159,124 @@ func (c *Context) Process(src, filename string) (string, error) {
 						c.Defines[nm] = true
 					}
 				}
+				out.drop()
 				continue
 			case "undef":
 				if active {
 					delete(c.Defines, strings.TrimSpace(m[2]))
 				}
+				out.drop()
 				continue
 			case "ifdef", "ifndef":
-				nm := strings.TrimSpace(m[2])
-				cond := c.Defines[nm]
+				cond := c.Defines[strings.TrimSpace(m[2])]
 				if m[1] == "ifndef" {
 					cond = !cond
 				}
 				stack = append(stack, frame{active: active && cond, taken: cond, parentActive: active})
 				active = stack[len(stack)-1].active
+				out.drop()
 				continue
 			case "error":
 				if active {
-					return "", fmt.Errorf("%s:%d: #error %s", filename, i+1, strings.TrimSpace(m[2]))
+					return Result{}, fmt.Errorf("%s:%d: #error %s", filename, i+1, strings.TrimSpace(m[2]))
 				}
+				out.drop()
 				continue
 			}
 		}
 		if m := reInclude.FindStringSubmatch(ln); m != nil {
 			if !active {
+				out.drop()
 				continue
 			}
 			inc := c.includePath(filename, m[1])
 			b, err := os.ReadFile(inc)
 			if err != nil {
-				return "", errors.New(msg("%s:%d: #include 失败：%v", filename, i+1, err))
+				return Result{}, errors.New(msg("%s:%d: #include 失败：%v", filename, i+1, err))
 			}
 			c.depth++
-			sub, err := c.Process(string(b), inc)
+			sub, err := c.ProcessMapped(string(b), inc)
 			c.depth--
 			if err != nil {
-				return "", err
+				return Result{}, err
 			}
 			// The included text replaces the directive line: it is spliced in whole (its own trailing
 			// newline included), so the lines around it keep their content and the line count grows by
-			// exactly the included file's line count.
-			if len(out) == 0 {
-				out = append(out, sub)
-			} else if strings.HasSuffix(out[len(out)-1], "\n") {
-				out = append(out, sub, "")
-			} else {
-				out = append(out, "\n"+sub)
-			}
+			// exactly the included file's line count. Its lines have no line in this file.
+			out.add(sub.Text)
 			continue
 		}
 		if active {
-			out = append(out, ln)
+			out.keep(ln, i+1)
+		} else {
+			out.drop()
 		}
 	}
 	if len(stack) != 0 {
-		return "", errors.New(msg("%s: 有 %d 个 #if 未闭合（缺 #endif）", filename, len(stack)))
+		return Result{}, errors.New(msg("%s: 有 %d 个 #if 未闭合（缺 #endif）", filename, len(stack)))
 	}
-	return strings.Join(out, "\n"), nil
+	return Result{Text: out.String(), Map: out.LineMap()}, nil
+}
+
+// sourceText accumulates a preprocessed file and, for every line of the result, the line of the input it
+// came from — without the second half a diagnostic after a directive would name a line that does not
+// exist in the file the author wrote.
+//
+// It reproduces strings.Join(out, "\n") exactly: a line the preprocessor consumed contributes nothing
+// (the lines around it join as if it were absent), and a line that was kept contributes itself — the
+// split's trailing empty element included, so a file ending in a newline still ends in one.
+type sourceText struct {
+	lines    []string
+	origins  []int
+	srcLines int  // how many lines the input has, so the trailing empty element is recognised
+	trailing bool // the input ended in a newline, so the result has to as well
+}
+
+// keep adds one surviving input line together with the line it came from; the empty last element a
+// trailing newline produces is not a line, and only the join may write it back.
+func (s *sourceText) keep(text string, line int) {
+	if text == "" && line == s.srcLines {
+		s.trailing = true
+		return
+	}
+	s.lines = append(s.lines, text)
+	s.origins = append(s.origins, line)
+}
+
+// drop consumes one line the preprocessor decided not to emit: it contributes nothing to the result.
+func (s *sourceText) drop() {}
+
+// add splices text that came from no line of the input (an #include): it joins it as one more element of
+// the result, contributing one result line per line of that text and no line in this file.
+func (s *sourceText) add(text string) {
+	s.lines = append(s.lines, text)
+	for i := 0; i < len(strings.Split(text, "\n")); i++ {
+		s.origins = append(s.origins, 0)
+	}
+	s.trailing = strings.HasSuffix(text, "\n")
+}
+
+// String is the preprocessed text: the surviving lines joined with newlines, keeping the trailing empty
+// element the input's own split produced when it ended in a newline.
+func (s *sourceText) String() string {
+	lines := s.lines
+	if s.trailing {
+		lines = append(append([]string{}, lines...), "")
+	}
+	return strings.Join(lines, "\n")
+}
+
+// LineMap is where each line of the result came from.
+func (s *sourceText) LineMap() LineMap {
+	n := len(strings.Split(s.String(), "\n"))
+	origins := s.origins
+	for len(origins) < n {
+		origins = append(origins, 0)
+	}
+	if len(origins) > n {
+		origins = origins[:n]
+	}
+	return LineMap{Original: origins}
 }
 
 // includePath resolves an #include target against the including file's directory.

@@ -7,7 +7,7 @@ import (
 )
 
 const sampleSrc = `#macro twice (a) {
-    #when (run) { #return #insert(#ast(a)) + #insert(#ast(a)) }
+    #return #insert(#ast(a)) + #insert(#ast(a))
 }
 
 // main drives the sample.
