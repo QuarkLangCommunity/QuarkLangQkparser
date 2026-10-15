@@ -1323,13 +1323,16 @@ func (p *parser) parseCmp() (Expr, error) {
 }
 
 // Bitwise levels, loosest first: `|`, `^`, `&`. They bind tighter than comparison (so `a & b == c` reads
-// as `(a & b) == c`), looser than `+`/`-`, and `&&`/`||` stay outside them.
+// as `(a & b) == c`), looser than `<<`/`>>`, and `&&`/`||` stay outside them. Below them the order is
+// `<<`/`>>`, then `+`/`-`, then `*`/`/`/`%`, then the unary operators (spec §5), so `1 + 2 << 3` reads
+// `(1 + 2) << 3`. Parentheses are erased by the time a tree exists, so this chain is the only place the
+// grouping can be decided; see TestPrecedenceTableMatchesTheSpec for the pinned table.
 func (p *parser) parseBitOr() (Expr, error)  { return p.parseBin(p.parseBitXor, TPipe) }
 func (p *parser) parseBitXor() (Expr, error) { return p.parseBin(p.parseBitAnd, TCaret) }
-func (p *parser) parseBitAnd() (Expr, error) { return p.parseBin(p.parseAdd, TAmper) }
-func (p *parser) parseAdd() (Expr, error)    { return p.parseBin(p.parseShift, TPlus, TMinus) }
+func (p *parser) parseBitAnd() (Expr, error) { return p.parseBin(p.parseShift, TAmper) }
+func (p *parser) parseAdd() (Expr, error)    { return p.parseBin(p.parseMul, TPlus, TMinus) }
 func (p *parser) parseMul() (Expr, error)    { return p.parseBin(p.parseUnary, TStar, TSlash, TPercent) }
-func (p *parser) parseShift() (Expr, error)  { return p.parseBin(p.parseMul, TShl, TShr) }
+func (p *parser) parseShift() (Expr, error)  { return p.parseBin(p.parseAdd, TShl, TShr) }
 
 func (p *parser) parseBin(left func() (Expr, error), kinds ...TokenKind) (Expr, error) {
 	x, err := left()
